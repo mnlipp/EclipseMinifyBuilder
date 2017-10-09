@@ -19,9 +19,8 @@
 package org.jdrupes.eclipse.minify.plugin.properties;
 
 import org.eclipse.core.resources.IResource;
-import org.eclipse.core.resources.IncrementalProjectBuilder;
+import org.eclipse.core.resources.ProjectScope;
 import org.eclipse.core.runtime.CoreException;
-import org.eclipse.core.runtime.QualifiedName;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
@@ -32,6 +31,8 @@ import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Text;
 import org.eclipse.ui.dialogs.PropertyPage;
 import org.jdrupes.eclipse.minify.plugin.MinifyBuilder;
+import org.osgi.service.prefs.BackingStoreException;
+import org.osgi.service.prefs.Preferences;
 
 public abstract class MinifyPropertyPage extends PropertyPage {
 
@@ -41,6 +42,16 @@ public abstract class MinifyPropertyPage extends PropertyPage {
 	private Combo selection;
 
 	protected abstract String[][] options();
+	
+	protected Preferences builderPreferences() {
+		IResource resource = (IResource)getElement();
+		ProjectScope projectScope = new ProjectScope(resource.getProject());
+		return projectScope.getNode(MinifyBuilder.BUILDER_ID);
+	}
+
+	protected String preferenceKey(String resourcePreference) {
+		return MinifyBuilder.preferenceKey((IResource)getElement(), resourcePreference);
+	}
 	
 	private void addFirstSection(Composite parent) {
 		Composite composite = createDefaultComposite(parent);
@@ -62,7 +73,7 @@ public abstract class MinifyPropertyPage extends PropertyPage {
 		separator.setLayoutData(gridData);
 	}
 
-	private void addSecondSection(Composite parent) {
+	private void addSecondSection(Composite parent, Preferences prefs) {
 		Composite composite = createDefaultComposite(parent);
 
 		// Label for owner field
@@ -78,22 +89,26 @@ public abstract class MinifyPropertyPage extends PropertyPage {
 	    }
 		selection.setText(options()[1][0]);
 
-		try {
-			String minifier = ((IResource) getElement()).getPersistentProperty(
-					new QualifiedName(MinifyBuilder.BUILDER_ID, MinifyBuilder.MINIFIER_PROPERTY));
-			if (minifier != null) {
-			    for (int i = 0; i < options().length; i++) {
-			    	if (minifier.equals(options()[0][i])) {
-			    		selection.setText(options()[1][i]);
-			    		break;
-			    	}
-			    }
+		// Set current selection
+		String minifier = prefs.get(preferenceKey(MinifyBuilder.MINIFIER),
+				MinifyBuilder.DONT_MINIFY);
+		if (!minifier.equals(MinifyBuilder.DONT_MINIFY)) {
+			for (int i = 0; i < options().length; i++) {
+				if (minifier.equals(options()[0][i])) {
+					selection.setText(options()[1][i]);
+					break;
+				}
 			}
-		} catch (CoreException e) {
-			// Leave default
 		}
 	}
 
+	protected Combo selection() {
+		return selection;
+	}
+	
+	protected void addSpecificSection(Composite parent, Preferences prefs) {
+	}
+	
 	/**
 	 * @see PreferencePage#createContents(Composite)
 	 */
@@ -105,9 +120,13 @@ public abstract class MinifyPropertyPage extends PropertyPage {
 		data.grabExcessHorizontalSpace = true;
 		composite.setLayoutData(data);
 
+		Preferences prefs = builderPreferences();
+		
 		addFirstSection(composite);
 		addSeparator(composite);
-		addSecondSection(composite);
+		addSecondSection(composite, prefs);
+		addSpecificSection(composite, prefs);
+		
 		return composite;
 	}
 
@@ -130,23 +149,36 @@ public abstract class MinifyPropertyPage extends PropertyPage {
 		// Populate the combo with the default value
 		selection.setText(options()[1][0]);
 	}
+
+	protected boolean performSpecificOk(Preferences prefs) throws CoreException {
+		return true;
+	}
 	
 	public boolean performOk() {
-		// store the value in the owner text field
 		try {
-			for (int i = 0; i < options().length; i++) {
-				if (selection.getText().equals(options()[1][i])) {
-					((IResource) getElement()).setPersistentProperty(
-							new QualifiedName(MinifyBuilder.BUILDER_ID, 
-									MinifyBuilder.MINIFIER_PROPERTY),
-							options()[0][i]);
-					((IResource)getElement()).getProject().build(
-							IncrementalProjectBuilder.FULL_BUILD, 
-							MinifyBuilder.BUILDER_ID, null, null);
-					break;
-				}
+			Preferences prefs = builderPreferences();
+			if (!performSpecificOk(prefs)) {
+				return false;
 			}
-		} catch (CoreException e) {
+		    for (int i = 0; i < options().length; i++) {
+		    	if (selection.getText().equals(options()[1][i])) {
+					prefs.put(preferenceKey(MinifyBuilder.MINIFIER), options()[0][i]);
+		    	}
+		    }
+		    if (prefs.get(preferenceKey(
+		    		MinifyBuilder.MINIFIER), MinifyBuilder.DONT_MINIFY)
+		    		.equals(MinifyBuilder.DONT_MINIFY)) {
+		    	String[] keys = prefs.keys();
+		    	for (String key: keys) {
+		    		if (key.endsWith("/" + ((IResource)getElement())
+		    				.getProjectRelativePath().toPortableString())) {
+		    			prefs.remove(key);
+		    		}
+		    	}
+		    }
+			prefs.flush();
+			((IResource)getElement()).touch(null);
+		} catch (CoreException | BackingStoreException e) {
 			return false;
 		}
 		return true;
