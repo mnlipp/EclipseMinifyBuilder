@@ -45,14 +45,130 @@ import org.eclipse.core.runtime.Status;
 import org.eclipse.core.runtime.preferences.IEclipsePreferences;
 import org.mozilla.javascript.ErrorReporter;
 import org.mozilla.javascript.EvaluatorException;
+import org.osgi.service.prefs.BackingStoreException;
+import org.osgi.service.prefs.Preferences;
 
 import com.yahoo.platform.yui.compressor.CssCompressor;
 import com.yahoo.platform.yui.compressor.JavaScriptCompressor;
 
 public class MinifyBuilder extends IncrementalProjectBuilder {
 	
-	public static String preferenceKey(IResource resource, String resourcePreference) {
-		return resourcePreference + "//" + resource.getProjectRelativePath().toPortableString();
+	public static final String BUILDER_ID = "org.jdrupes.eclipse.minify.plugin.minifyBuilder";
+	public static final String DONT_MINIFY = "DONT_MINIFY";
+	public static final String MINIFIER = "minifier";
+	public static final String YUI_COMPRESSOR = "YuiCompressor";
+	public static final String YUI_PRESERVE_SEMICOLONS = "preserveSemicolons";
+	public static final String YUI_DISABLE_OPTIMIZATIONS = "disableOptimizations";
+	
+	private static final String MARKER_TYPE = "org.jdrupes.eclipse.minify.plugin.minifyProblem";
+
+	/**
+	 * Returns the builder preferences for the given resource.
+	 * 
+	 * @param resource the resource
+	 * @return the preferences
+	 */
+	public static Preferences preferences(IResource resource) {
+		ProjectScope projectScope = new ProjectScope(resource.getProject());
+		return projectScope.getNode(BUILDER_ID);
+	}
+
+	/**
+	 * Generate the key for a given resource and its associated property.
+	 * 
+	 * @param resource the resource
+	 * @param property the property
+	 * @return the key
+	 */
+	public static String preferenceKey(IResource resource, String property) {
+		return property + "//" + resource.getProjectRelativePath().toPortableString();
+	}
+
+	/**
+	 * Remove a resource (i.e. all its properties) from the builder's preferences.
+	 * 
+	 * @param prefs the preferences
+	 * @param resource the resource
+	 * @throws BackingStoreException
+	 */
+	public static void removeResource(Preferences prefs, IResource resource) 
+			throws BackingStoreException {
+		String[] keys = prefs.keys();
+		for (String key: keys) {
+    		if (key.endsWith("/" + resource.getProjectRelativePath().toPortableString())) {
+    			prefs.remove(key);
+    		}
+    	}
+		prefs.flush();
+	}
+
+	/**
+	 * Associate one resource's properties with another resource.
+	 * 
+	 * @param fromPrefs the preferences to take the properties from
+	 * @param fromResource the resource to take the properties from
+	 * @param toPrefs the preferences to move the properties to
+	 * @param toResource the resource to associated with the properties
+	 * @throws BackingStoreException
+	 */
+	public static void moveResource(Preferences fromPrefs, IResource fromResource,
+			Preferences toPrefs, IResource toResource) 
+			throws BackingStoreException {
+    	String[] keys = fromPrefs.keys();
+    	for (String key: keys) {
+    		if (key.endsWith("/" + fromResource.getProjectRelativePath().toPortableString())) {
+    			String resourcePreference = key.substring(0, key.indexOf('/'));
+    			toPrefs.put(preferenceKey(toResource, resourcePreference), fromPrefs.get(key, ""));
+    			fromPrefs.remove(key);
+    		}
+    	}
+    	fromPrefs.flush();
+    	toPrefs.flush();
+	}
+	
+	@Override
+	protected IProject[] build(int kind, @SuppressWarnings("rawtypes") Map args,
+			IProgressMonitor monitor) throws CoreException {
+		ProjectScope projectScope = new ProjectScope(getProject());
+		IEclipsePreferences prefs = projectScope.getNode(BUILDER_ID);
+		if (kind == FULL_BUILD) {
+			fullBuild(prefs, monitor);
+		} else {
+			IResourceDelta delta = getDelta(getProject());
+			if (delta == null) {
+				fullBuild(prefs, monitor);
+			} else {
+				incrementalBuild(delta, prefs, monitor);
+			}
+		}
+		return null;
+	}
+
+	protected void fullBuild(final IEclipsePreferences prefs, final IProgressMonitor monitor)
+			throws CoreException {
+		try {
+			getProject().accept(new MinifyResourceVisitor(prefs));
+		} catch (CoreException e) {
+		}
+	}
+
+	class MinifyResourceVisitor implements IResourceVisitor {
+		IEclipsePreferences prefs;
+
+		public MinifyResourceVisitor(IEclipsePreferences prefs) {
+			this.prefs = prefs;
+		}
+		
+		public boolean visit(IResource resource) throws CoreException {
+			minifyResource(resource, prefs);
+			return true;
+		}
+	}
+	
+	protected void incrementalBuild(IResourceDelta delta,
+			IEclipsePreferences prefs, IProgressMonitor monitor) throws CoreException {
+		// the visitor does the work.
+		delta.accept(new SampleDeltaVisitor(prefs));
 	}
 	
 	class SampleDeltaVisitor implements IResourceDeltaVisitor {
@@ -83,101 +199,6 @@ public class MinifyBuilder extends IncrementalProjectBuilder {
 		}
 	}
 
-	class MinifyErrorHandler implements ErrorReporter {
-		
-		private IFile file;
-
-		public MinifyErrorHandler(IFile file) {
-			this.file = file;
-		}
-
-		@Override
-		public void error(String message, String sourceName, int line, 
-				String lineSource, int lineOffset) {
-			MinifyBuilder.this.addMarker(file, message, line, IMarker.SEVERITY_ERROR);
-		}
-
-		@Override
-		public void warning(String message, String sourceName, int line, 
-				String lineSource, int lineOffset) {
-			MinifyBuilder.this.addMarker(file, message, line, IMarker.SEVERITY_WARNING);
-		}
-
-		@Override
-		public EvaluatorException runtimeError(String message, String sourceName, int line, 
-				String lineSource, int lineOffset) {
-			return new EvaluatorException(message, sourceName, line, lineSource, lineOffset);
-		}
-	}
-
-	public static final String BUILDER_ID = "org.jdrupes.eclipse.minify.plugin.minifyBuilder";
-	public static final String DONT_MINIFY = "DONT_MINIFY";
-	public static final String MINIFIER = "minifier";
-	public static final String YUI_COMPRESSOR = "YuiCompressor";
-	public static final String YUI_PRESERVE_SEMICOLONS = "preserveSemicolons";
-	public static final String YUI_DISABLE_OPTIMIZATIONS = "disableOptimizations";
-	
-	private static final String MARKER_TYPE = "org.jdrupes.eclipse.minify.plugin.minifyProblem";
-
-	private void addMarker(IFile file, String message, int lineNumber,
-			int severity) {
-		try {
-			IMarker marker = file.createMarker(MARKER_TYPE);
-			marker.setAttribute(IMarker.MESSAGE, message);
-			marker.setAttribute(IMarker.SEVERITY, severity);
-			if (lineNumber == -1) {
-				lineNumber = 1;
-			}
-			marker.setAttribute(IMarker.LINE_NUMBER, lineNumber);
-		} catch (CoreException e) {
-		}
-	}
-
-	@Override
-	protected IProject[] build(int kind, @SuppressWarnings("rawtypes") Map args,
-			IProgressMonitor monitor) throws CoreException {
-		ProjectScope projectScope = new ProjectScope(getProject());
-		IEclipsePreferences prefs = projectScope.getNode(BUILDER_ID);
-		if (kind == FULL_BUILD) {
-			fullBuild(prefs, monitor);
-		} else {
-			IResourceDelta delta = getDelta(getProject());
-			if (delta == null) {
-				fullBuild(prefs, monitor);
-			} else {
-				incrementalBuild(delta, prefs, monitor);
-			}
-		}
-		return null;
-	}
-
-	class MinifyResourceVisitor implements IResourceVisitor {
-		IEclipsePreferences prefs;
-
-		public MinifyResourceVisitor(IEclipsePreferences prefs) {
-			this.prefs = prefs;
-		}
-		
-		public boolean visit(IResource resource) throws CoreException {
-			minifyResource(resource, prefs);
-			return true;
-		}
-	}
-	
-	protected void fullBuild(final IEclipsePreferences prefs, final IProgressMonitor monitor)
-			throws CoreException {
-		try {
-			getProject().accept(new MinifyResourceVisitor(prefs));
-		} catch (CoreException e) {
-		}
-	}
-
-	protected void incrementalBuild(IResourceDelta delta,
-			IEclipsePreferences prefs, IProgressMonitor monitor) throws CoreException {
-		// the visitor does the work.
-		delta.accept(new SampleDeltaVisitor(prefs));
-	}
-	
 	protected void clean(IProgressMonitor monitor) throws CoreException {
 		// delete markers set and files created
 		getProject().deleteMarkers(MARKER_TYPE, true, IResource.DEPTH_INFINITE);
@@ -190,7 +211,14 @@ public class MinifyBuilder extends IncrementalProjectBuilder {
 		}
 	}
 
-	void minifyResource(IResource resource, IEclipsePreferences prefs) 
+	/**
+	 * Does the actual work.
+	 * 
+	 * @param resource the resource to minify.
+	 * @param prefs the preferences store with the resource's minify properties
+	 * @throws CoreException
+	 */
+	private void minifyResource(IResource resource, IEclipsePreferences prefs) 
 			throws CoreException {
 		if (!(resource instanceof IFile)) {
 			return;
@@ -309,4 +337,49 @@ public class MinifyBuilder extends IncrementalProjectBuilder {
 			}
 		}
 	}
+	
+	/**
+	 * The error reporter for the YUICompressor.
+	 */
+	class MinifyErrorHandler implements ErrorReporter {
+		
+		private IFile file;
+
+		public MinifyErrorHandler(IFile file) {
+			this.file = file;
+		}
+
+		@Override
+		public void error(String message, String sourceName, int line, 
+				String lineSource, int lineOffset) {
+			MinifyBuilder.this.addMarker(file, message, line, IMarker.SEVERITY_ERROR);
+		}
+
+		@Override
+		public void warning(String message, String sourceName, int line, 
+				String lineSource, int lineOffset) {
+			MinifyBuilder.this.addMarker(file, message, line, IMarker.SEVERITY_WARNING);
+		}
+
+		@Override
+		public EvaluatorException runtimeError(String message, String sourceName, int line, 
+				String lineSource, int lineOffset) {
+			return new EvaluatorException(message, sourceName, line, lineSource, lineOffset);
+		}
+	}
+
+	private void addMarker(IFile file, String message, int lineNumber,
+			int severity) {
+		try {
+			IMarker marker = file.createMarker(MARKER_TYPE);
+			marker.setAttribute(IMarker.MESSAGE, message);
+			marker.setAttribute(IMarker.SEVERITY, severity);
+			if (lineNumber == -1) {
+				lineNumber = 1;
+			}
+			marker.setAttribute(IMarker.LINE_NUMBER, lineNumber);
+		} catch (CoreException e) {
+		}
+	}
+
 }

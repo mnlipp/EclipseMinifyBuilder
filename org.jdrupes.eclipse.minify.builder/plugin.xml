@@ -129,5 +129,11 @@
          </enabledWhen>
       </page>
    </extension>
+   <extension
+         point="org.eclipse.ui.startup">
+      <startup
+            class="org.jdrupes.eclipse.minify.plugin.Startup">
+      </startup>
+   </extension>
 
 </plugin>

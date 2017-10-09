@@ -19,7 +19,6 @@
 package org.jdrupes.eclipse.minify.plugin.properties;
 
 import org.eclipse.core.resources.IResource;
-import org.eclipse.core.resources.ProjectScope;
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.layout.GridData;
@@ -44,9 +43,7 @@ public abstract class MinifyPropertyPage extends PropertyPage {
 	protected abstract String[][] options();
 	
 	protected Preferences builderPreferences() {
-		IResource resource = (IResource)getElement();
-		ProjectScope projectScope = new ProjectScope(resource.getProject());
-		return projectScope.getNode(MinifyBuilder.BUILDER_ID);
+		return MinifyBuilder.preferences((IResource)getElement());
 	}
 
 	protected String preferenceKey(String resourcePreference) {
@@ -168,13 +165,7 @@ public abstract class MinifyPropertyPage extends PropertyPage {
 		    if (prefs.get(preferenceKey(
 		    		MinifyBuilder.MINIFIER), MinifyBuilder.DONT_MINIFY)
 		    		.equals(MinifyBuilder.DONT_MINIFY)) {
-		    	String[] keys = prefs.keys();
-		    	for (String key: keys) {
-		    		if (key.endsWith("/" + ((IResource)getElement())
-		    				.getProjectRelativePath().toPortableString())) {
-		    			prefs.remove(key);
-		    		}
-		    	}
+		    	MinifyBuilder.removeResource(prefs, (IResource)getElement());
 		    }
 			prefs.flush();
 			((IResource)getElement()).touch(null);
