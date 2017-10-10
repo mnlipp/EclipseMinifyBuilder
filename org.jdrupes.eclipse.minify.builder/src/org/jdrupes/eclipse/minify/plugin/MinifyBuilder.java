@@ -45,8 +45,6 @@ import org.eclipse.core.runtime.Status;
 import org.eclipse.core.runtime.preferences.IEclipsePreferences;
 import org.mozilla.javascript.ErrorReporter;
 import org.mozilla.javascript.EvaluatorException;
-import org.osgi.service.prefs.BackingStoreException;
-import org.osgi.service.prefs.Preferences;
 
 import com.yahoo.platform.yui.compressor.CssCompressor;
 import com.yahoo.platform.yui.compressor.JavaScriptCompressor;
@@ -62,70 +60,6 @@ public class MinifyBuilder extends IncrementalProjectBuilder {
 	
 	private static final String MARKER_TYPE = "org.jdrupes.eclipse.minify.plugin.minifyProblem";
 
-	/**
-	 * Returns the builder preferences for the given resource.
-	 * 
-	 * @param resource the resource
-	 * @return the preferences
-	 */
-	public static Preferences preferences(IResource resource) {
-		ProjectScope projectScope = new ProjectScope(resource.getProject());
-		return projectScope.getNode(BUILDER_ID);
-	}
-
-	/**
-	 * Generate the key for a given resource and its associated property.
-	 * 
-	 * @param resource the resource
-	 * @param property the property
-	 * @return the key
-	 */
-	public static String preferenceKey(IResource resource, String property) {
-		return property + "//" + resource.getProjectRelativePath().toPortableString();
-	}
-
-	/**
-	 * Remove a resource (i.e. all its properties) from the builder's preferences.
-	 * 
-	 * @param prefs the preferences
-	 * @param resource the resource
-	 * @throws BackingStoreException
-	 */
-	public static void removeResource(Preferences prefs, IResource resource) 
-			throws BackingStoreException {
-		String[] keys = prefs.keys();
-		for (String key: keys) {
-    		if (key.endsWith("/" + resource.getProjectRelativePath().toPortableString())) {
-    			prefs.remove(key);
-    		}
-    	}
-		prefs.flush();
-	}
-
-	/**
-	 * Associate one resource's properties with another resource.
-	 * 
-	 * @param fromPrefs the preferences to take the properties from
-	 * @param fromResource the resource to take the properties from
-	 * @param toPrefs the preferences to move the properties to
-	 * @param toResource the resource to associated with the properties
-	 * @throws BackingStoreException
-	 */
-	public static void moveResource(Preferences fromPrefs, IResource fromResource,
-			Preferences toPrefs, IResource toResource) 
-			throws BackingStoreException {
-    	String[] keys = fromPrefs.keys();
-    	for (String key: keys) {
-    		if (key.endsWith("/" + fromResource.getProjectRelativePath().toPortableString())) {
-    			String resourcePreference = key.substring(0, key.indexOf('/'));
-    			toPrefs.put(preferenceKey(toResource, resourcePreference), fromPrefs.get(key, ""));
-    			fromPrefs.remove(key);
-    		}
-    	}
-    	fromPrefs.flush();
-    	toPrefs.flush();
-	}
-	
 	@Override
 	protected IProject[] build(int kind, @SuppressWarnings("rawtypes") Map args,
 			IProgressMonitor monitor) throws CoreException {
@@ -223,7 +157,7 @@ public class MinifyBuilder extends IncrementalProjectBuilder {
 		if (!(resource instanceof IFile)) {
 			return;
 		}
-		String minifier = prefs.get(preferenceKey(resource, MINIFIER), DONT_MINIFY);
+		String minifier = prefs.get(Startup.preferenceKey(resource, MINIFIER), DONT_MINIFY);
 		if (minifier.equals(DONT_MINIFY)) {
 			return;
 		}
@@ -321,9 +255,9 @@ public class MinifyBuilder extends IncrementalProjectBuilder {
 			throws IOException {
 			this.out = out;
 			preserveSemicolons = prefs.getBoolean(
-					preferenceKey(resource, YUI_PRESERVE_SEMICOLONS), true);
+					Startup.preferenceKey(resource, YUI_PRESERVE_SEMICOLONS), true);
 			disableOptimizations = prefs.getBoolean(
-					preferenceKey(resource, YUI_DISABLE_OPTIMIZATIONS), true);
+					Startup.preferenceKey(resource, YUI_DISABLE_OPTIMIZATIONS), true);
 			compressor = new JavaScriptCompressor(in, reporter);
 		}
 
