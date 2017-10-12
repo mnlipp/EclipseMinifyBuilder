@@ -18,14 +18,11 @@
 
 package org.jdrupes.eclipse.minify.plugin;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
+import java.io.OutputStream;
 import java.io.PipedInputStream;
 import java.io.PipedOutputStream;
-import java.io.Reader;
-import java.io.Writer;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 import org.eclipse.core.resources.IFile;
@@ -43,11 +40,11 @@ import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.IStatus;
 import org.eclipse.core.runtime.Status;
 import org.eclipse.core.runtime.preferences.IEclipsePreferences;
-import org.mozilla.javascript.ErrorReporter;
+import org.eclipse.ui.console.ConsolePlugin;
+import org.eclipse.ui.console.IConsole;
+import org.eclipse.ui.console.IConsoleManager;
+import org.eclipse.ui.console.MessageConsole;
 import org.mozilla.javascript.EvaluatorException;
-
-import com.yahoo.platform.yui.compressor.CssCompressor;
-import com.yahoo.platform.yui.compressor.JavaScriptCompressor;
 
 public class MinifyBuilder extends IncrementalProjectBuilder {
 	
@@ -57,6 +54,12 @@ public class MinifyBuilder extends IncrementalProjectBuilder {
 	public static final String YUI_COMPRESSOR = "YuiCompressor";
 	public static final String YUI_PRESERVE_SEMICOLONS = "preserveSemicolons";
 	public static final String YUI_DISABLE_OPTIMIZATIONS = "disableOptimizations";
+	
+	public static final String GOOGLE_CLOSURE_COMPILER = "GoogleClosureComiler";
+	public static final String GCC_OPTIMIZATION = "optWhitespaceOnly";
+	public static final String GCC_OPT_WHITESPACE_ONLY = "optWhitespaceOnly";
+	public static final String GCC_OPT_SIMPLE = "optSimple";
+	public static final String GCC_OPT_ADVANCED = "optAdvanced";
 	
 	private static final String MARKER_TYPE = "org.jdrupes.eclipse.minify.plugin.minifyProblem";
 
@@ -167,33 +170,34 @@ public class MinifyBuilder extends IncrementalProjectBuilder {
 		IPath destPath = srcPath.removeFileExtension().addFileExtension(
 				"min." + resource.getFileExtension());
 		IFile destFile = srcFile.getProject().getFile(destPath);
-		String destCharset = destFile.exists() ? destFile.getCharset() : srcFile.getCharset();
 		try {
-			SafeRunner producer = null;
-			try (BufferedReader in = new BufferedReader(
-					new InputStreamReader(srcFile.getContents(), srcFile.getCharset()));
-					PipedInputStream toIFile = new PipedInputStream();
-					Writer out = new OutputStreamWriter(new PipedOutputStream(toIFile), destCharset)) {
+			MinifyRunner producer = null;
+			try (PipedInputStream toIFile = new PipedInputStream();
+					OutputStream out = new PipedOutputStream(toIFile)) {
 				if (resource.getFileExtension().equals("css")) {
-					producer = new CssMinifier(in, out);
+					producer = new YuiCssMinifier(this, srcFile, destFile, out, prefs);
 				} else if (resource.getFileExtension().equals("js")) {
-					try {
-						producer = new JsMinifier(in, out, srcFile, prefs,
-								new MinifyErrorHandler(srcFile));
-					} catch (EvaluatorException e) {
-						return;
+					if (minifier.equals(YUI_COMPRESSOR)) {
+						try {
+							producer = new YuiJsMinifier(this, srcFile, destFile, out, prefs);
+						} catch (EvaluatorException e) {
+							return;
+						}
+					} else 	if (minifier.equals(GOOGLE_CLOSURE_COMPILER)) {
+						producer = new GccMinifier(this, srcFile, destFile, out, prefs);
 					}
 				}
 				producer.start();
 				if (!destFile.exists()) {
 					destFile.create(toIFile, IResource.FORCE | IResource.DERIVED, null);
-					destFile.setCharset(destCharset, null);
 				} else {
 					destFile.setDerived(true, null);
 					destFile.setContents(toIFile, true, true, null);
 				}
+				destFile.setCharset(producer.destCharset(), null);
 			}
 			producer.join();
+			processMarkers();
 			producer.checkException();
 		} catch (CoreException e) {
 			throw e;
@@ -202,10 +206,31 @@ public class MinifyBuilder extends IncrementalProjectBuilder {
 		}
 	}
 
-	private class SafeRunner extends Thread {
+	public MessageConsole minifierConsole() {
+		IConsoleManager conMan = ConsolePlugin.getDefault().getConsoleManager();
+		IConsole[] existing = conMan.getConsoles();
+		for (int i = 0; i < existing.length; i++)
+			if ("Minifier".equals(existing[i].getName()))
+				return (MessageConsole) existing[i];
+		//no console found, so create a new one
+		MessageConsole myConsole = new MessageConsole("Minifier", null);
+		conMan.addConsoles(new IConsole[] { myConsole });
+		return myConsole;
+	}
+	
+	public static abstract class MinifyRunner extends Thread {
 		
+		private MinifyBuilder builder;
 		private Exception exception = null;
 
+		protected MinifyRunner(MinifyBuilder builder) {
+			this.builder = builder;
+		}
+
+		protected MinifyBuilder builder() {
+			return builder;
+		}
+		
 		public void checkException() throws Exception {
 			if (exception != null) {
 				throw exception;
@@ -223,95 +248,42 @@ public class MinifyBuilder extends IncrementalProjectBuilder {
 
 		protected void runSafe() throws Exception {
 		}
-	}
-	
-	private class CssMinifier extends SafeRunner {
-		private Reader in;
-		private Writer out;
-
-		public CssMinifier(Reader in, Writer out) {
-			this.in = in;
-			this.out = out;
-		}
-
-		@Override
-		protected void runSafe() throws Exception {
-			try {
-				new CssCompressor(in).compress(out, -1);
-			} finally {
-				out.close();
-			}
-		}
-	}
-	
-	private class JsMinifier extends SafeRunner {
-		private Writer out;
-		private JavaScriptCompressor compressor;
-		boolean preserveSemicolons;
-		boolean disableOptimizations;
 		
-		public JsMinifier(Reader in, Writer out, 
-				IResource resource, IEclipsePreferences prefs, ErrorReporter reporter)
-			throws IOException {
-			this.out = out;
-			preserveSemicolons = prefs.getBoolean(
-					Startup.preferenceKey(resource, YUI_PRESERVE_SEMICOLONS), true);
-			disableOptimizations = prefs.getBoolean(
-					Startup.preferenceKey(resource, YUI_DISABLE_OPTIMIZATIONS), true);
-			compressor = new JavaScriptCompressor(in, reporter);
-		}
-
-		@Override
-		protected void runSafe() throws Exception {
-			try {
-				compressor.compress(out, 512, false, false, 
-						preserveSemicolons, disableOptimizations);
-			} finally {
-				out.close();
-			}
-		}
+		protected abstract String destCharset();
 	}
 	
-	/**
-	 * The error reporter for the YUICompressor.
-	 */
-	class MinifyErrorHandler implements ErrorReporter {
+	private class MarkerInfo {
+		public IFile file;
+		public String message;
+		public int lineNumber;
+		public int severity;
 		
-		private IFile file;
-
-		public MinifyErrorHandler(IFile file) {
+		public MarkerInfo(IFile file, String message, int lineNumber, int severity) {
 			this.file = file;
-		}
-
-		@Override
-		public void error(String message, String sourceName, int line, 
-				String lineSource, int lineOffset) {
-			MinifyBuilder.this.addMarker(file, message, line, IMarker.SEVERITY_ERROR);
-		}
-
-		@Override
-		public void warning(String message, String sourceName, int line, 
-				String lineSource, int lineOffset) {
-			MinifyBuilder.this.addMarker(file, message, line, IMarker.SEVERITY_WARNING);
-		}
-
-		@Override
-		public EvaluatorException runtimeError(String message, String sourceName, int line, 
-				String lineSource, int lineOffset) {
-			return new EvaluatorException(message, sourceName, line, lineSource, lineOffset);
+			this.message = message;
+			this.lineNumber = lineNumber;
+			this.severity = severity;
 		}
 	}
+	
+	private List<MarkerInfo> pendingMarkers = new ArrayList<>();
 
-	private void addMarker(IFile file, String message, int lineNumber,
-			int severity) {
+	public void addMarker(IFile file, String message, int lineNumber, int severity) {
+		pendingMarkers.add(new MarkerInfo(file, message, lineNumber, severity));
+	}
+
+	private void processMarkers() {
 		try {
-			IMarker marker = file.createMarker(MARKER_TYPE);
-			marker.setAttribute(IMarker.MESSAGE, message);
-			marker.setAttribute(IMarker.SEVERITY, severity);
-			if (lineNumber == -1) {
-				lineNumber = 1;
+			for (MarkerInfo mi: pendingMarkers) {
+				IMarker marker = mi.file.createMarker(MARKER_TYPE);
+				marker.setAttribute(IMarker.MESSAGE, mi.message);
+				marker.setAttribute(IMarker.SEVERITY, mi.severity);
+				if (mi.lineNumber == -1) {
+					mi.lineNumber = 1;
+				}
+				marker.setAttribute(IMarker.LINE_NUMBER, mi.lineNumber);
 			}
-			marker.setAttribute(IMarker.LINE_NUMBER, lineNumber);
+			pendingMarkers.clear();
 		} catch (CoreException e) {
 		}
 	}

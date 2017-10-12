@@ -82,7 +82,7 @@ public abstract class MinifyPropertyPage extends PropertyPage {
 	    selection = new Combo(composite, SWT.READ_ONLY);
 
 	    // Add the items, one by one
-	    for (int i = 0; i < options().length; i++) {
+	    for (int i = 0; i < options()[0].length; i++) {
 	    	selection.add(options()[1][i]);
 	    }
 		selection.setText(options()[1][0]);
@@ -91,7 +91,7 @@ public abstract class MinifyPropertyPage extends PropertyPage {
 		String minifier = prefs.get(preferenceKey(MinifyBuilder.MINIFIER),
 				MinifyBuilder.DONT_MINIFY);
 		if (!minifier.equals(MinifyBuilder.DONT_MINIFY)) {
-			for (int i = 0; i < options().length; i++) {
+			for (int i = 0; i < options()[0].length; i++) {
 				if (minifier.equals(options()[0][i])) {
 					selection.setText(options()[1][i]);
 					break;
@@ -128,7 +128,7 @@ public abstract class MinifyPropertyPage extends PropertyPage {
 		return composite;
 	}
 
-	private Composite createDefaultComposite(Composite parent) {
+	protected Composite createDefaultComposite(Composite parent) {
 		Composite composite = new Composite(parent, SWT.NULL);
 		GridLayout layout = new GridLayout();
 		layout.numColumns = 2;
@@ -158,7 +158,7 @@ public abstract class MinifyPropertyPage extends PropertyPage {
 			if (!performSpecificOk(prefs)) {
 				return false;
 			}
-		    for (int i = 0; i < options().length; i++) {
+		    for (int i = 0; i < options()[0].length; i++) {
 		    	if (selection.getText().equals(options()[1][i])) {
 					prefs.put(preferenceKey(MinifyBuilder.MINIFIER), options()[0][i]);
 		    	}
