@@ -40,6 +40,7 @@ import org.eclipse.core.runtime.IPath;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.IStatus;
 import org.eclipse.core.runtime.Status;
+import org.eclipse.core.runtime.SubMonitor;
 import org.eclipse.core.runtime.preferences.IEclipsePreferences;
 import org.eclipse.ui.console.ConsolePlugin;
 import org.eclipse.ui.console.IConsole;
@@ -86,39 +87,48 @@ public class MinifyBuilder extends IncrementalProjectBuilder {
 	protected void fullBuild(final IEclipsePreferences prefs, final IProgressMonitor monitor)
 			throws CoreException {
 		try {
-			getProject().accept(new MinifyResourceVisitor(prefs));
+			final List<IResource> toProcess = new ArrayList<>();
+			getProject().accept(new IResourceVisitor() {
+				@Override
+				public boolean visit(IResource resource) throws CoreException {
+					toProcess.add(resource);
+					return true;
+				}
+			});
+			SubMonitor subMonitor = SubMonitor.convert(monitor, toProcess.size());
+			for (IResource resource: toProcess) {
+				subMonitor.split(1);
+				minifyResource(resource, prefs);
+			}
 		} catch (CoreException e) {
 		}
 	}
 
-	class MinifyResourceVisitor implements IResourceVisitor {
-		IEclipsePreferences prefs;
-
-		public MinifyResourceVisitor(IEclipsePreferences prefs) {
-			this.prefs = prefs;
-		}
-		
-		public boolean visit(IResource resource) throws CoreException {
-			minifyResource(resource, prefs);
-			return true;
-		}
-	}
-	
-	protected void incrementalBuild(IResourceDelta delta,
+	protected void incrementalBuild(IResourceDelta change,
 			IEclipsePreferences prefs, IProgressMonitor monitor) throws CoreException {
 		// the visitor does the work.
-		delta.accept(new SampleDeltaVisitor(prefs));
-	}
-	
-	class SampleDeltaVisitor implements IResourceDeltaVisitor {
-		IEclipsePreferences prefs;
-		
-		public SampleDeltaVisitor(IEclipsePreferences prefs) {
-			this.prefs = prefs;
-		}
-		
-		@Override
-		public boolean visit(IResourceDelta delta) throws CoreException {
+		List<IResourceDelta> deltas = new ArrayList<>();
+		change.accept(new IResourceDeltaVisitor() {
+			@Override
+			public boolean visit(IResourceDelta delta) throws CoreException {
+				// We're only interested in css and js file changes.
+				if (delta.getResource() instanceof IFile) {
+					IFile file = (IFile)delta.getResource();
+					if (file.getFileExtension().equals("js")
+							|| file.getFileExtension().equals("css")) {
+						deltas.add(delta);
+					}
+				}
+				return true;
+			}
+		});
+		// Handle removals first, they may actually be renames.
+		deltas.sort((a, b) -> 
+			a.getKind() == IResourceDelta.REMOVED 
+					&& b.getKind() != IResourceDelta.REMOVED ? -1 : 0);
+		SubMonitor subMonitor = SubMonitor.convert(monitor, deltas.size());
+		for (IResourceDelta delta: deltas) {
+			subMonitor.split(1);
 			IResource resource = delta.getResource();
 			switch (delta.getKind()) {
 			case IResourceDelta.ADDED:
@@ -142,11 +152,9 @@ public class MinifyBuilder extends IncrementalProjectBuilder {
 				minifyResource(resource, prefs);
 				break;
 			}
-			//return true to continue visiting children.
-			return true;
 		}
 	}
-
+	
 	protected void clean(IProgressMonitor monitor) throws CoreException {
 		// delete markers set and files created
 		getProject().deleteMarkers(MARKER_TYPE, true, IResource.DEPTH_INFINITE);
@@ -171,11 +179,12 @@ public class MinifyBuilder extends IncrementalProjectBuilder {
 		if (!(resource instanceof IFile)) {
 			return;
 		}
+		IFile srcFile = (IFile) resource;
 		String minifier = prefs.get(PrefsAccess.preferenceKey(resource, MINIFIER), DONT_MINIFY);
+		deleteMarkers(srcFile);
 		if (minifier.equals(DONT_MINIFY)) {
 			return;
 		}
-		IFile srcFile = (IFile) resource;
 		deleteMarkers(srcFile);
 		IPath srcPath = srcFile.getProjectRelativePath();
 		IPath destPath = srcPath.removeFileExtension().addFileExtension(
@@ -279,6 +288,15 @@ public class MinifyBuilder extends IncrementalProjectBuilder {
 	
 	private List<MarkerInfo> pendingMarkers = new ArrayList<>();
 
+	/**
+	 * Marker can only be created in the "main" thread, so the information
+	 * has to be buffered.
+	 * 
+	 * @param file
+	 * @param message
+	 * @param lineNumber
+	 * @param severity
+	 */
 	public void addMarker(IFile file, String message, int lineNumber, int severity) {
 		pendingMarkers.add(new MarkerInfo(file, message, lineNumber, severity));
 	}
