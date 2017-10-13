@@ -114,8 +114,8 @@ public class MinifyBuilder extends IncrementalProjectBuilder {
 				// We're only interested in css and js file changes.
 				if (delta.getResource() instanceof IFile) {
 					IFile file = (IFile)delta.getResource();
-					if (file.getFileExtension().equals("js")
-							|| file.getFileExtension().equals("css")) {
+					if ("js".equals(file.getFileExtension())
+							|| "css".equals(file.getFileExtension())) {
 						deltas.add(delta);
 					}
 				}
