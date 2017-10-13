@@ -64,7 +64,7 @@ public class MinifyJsPropertyPage extends MinifyPropertyPage {
 		optionsStackLayout = new StackLayout();
 		optionsStack.setLayout(optionsStackLayout);
 		
-		yuiOptGroup = new Composite(optionsStack, SWT.BORDER);
+		yuiOptGroup = new Composite(optionsStack, SWT.NONE);
 		GridLayout layout = new GridLayout();
 		layout.numColumns = 1;
 		yuiOptGroup.setLayout(layout);
@@ -78,7 +78,7 @@ public class MinifyJsPropertyPage extends MinifyPropertyPage {
 		disableOptimizations = createCheckbox("Disable Optimizations",
 				MinifyBuilder.YUI_DISABLE_OPTIMIZATIONS, true, prefs);
 
-		gccOptGroup = new Composite(optionsStack, SWT.BORDER);
+		gccOptGroup = new Composite(optionsStack, SWT.NONE);
 		layout = new GridLayout();
 		layout.numColumns = 1;
 		gccOptGroup.setLayout(layout);
