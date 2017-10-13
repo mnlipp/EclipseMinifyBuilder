@@ -34,6 +34,7 @@ import org.eclipse.core.resources.IResourceDeltaVisitor;
 import org.eclipse.core.resources.IResourceVisitor;
 import org.eclipse.core.resources.IncrementalProjectBuilder;
 import org.eclipse.core.resources.ProjectScope;
+import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IPath;
 import org.eclipse.core.runtime.IProgressMonitor;
@@ -45,6 +46,7 @@ import org.eclipse.ui.console.IConsole;
 import org.eclipse.ui.console.IConsoleManager;
 import org.eclipse.ui.console.MessageConsole;
 import org.mozilla.javascript.EvaluatorException;
+import org.osgi.service.prefs.Preferences;
 
 public class MinifyBuilder extends IncrementalProjectBuilder {
 	
@@ -125,6 +127,15 @@ public class MinifyBuilder extends IncrementalProjectBuilder {
 				break;
 			case IResourceDelta.REMOVED:
 				// handle removed resource
+				Preferences resPrefs = PrefsAccess.preferences(resource);
+				if ((delta.getFlags() & IResourceDelta.MOVED_TO) != 0) {
+					IPath toPath = delta.getMovedToPath();
+					IResource toResource = ResourcesPlugin
+							.getWorkspace().getRoot().findMember(toPath);
+					PrefsAccess.moveResource(resPrefs, resource, 
+							PrefsAccess.preferences(toResource), toResource);
+				}
+				PrefsAccess.removeResource(resPrefs, resource);
 				break;
 			case IResourceDelta.CHANGED:
 				// handle changed resource
@@ -160,7 +171,7 @@ public class MinifyBuilder extends IncrementalProjectBuilder {
 		if (!(resource instanceof IFile)) {
 			return;
 		}
-		String minifier = prefs.get(Startup.preferenceKey(resource, MINIFIER), DONT_MINIFY);
+		String minifier = prefs.get(PrefsAccess.preferenceKey(resource, MINIFIER), DONT_MINIFY);
 		if (minifier.equals(DONT_MINIFY)) {
 			return;
 		}

@@ -19,14 +19,10 @@
 package org.jdrupes.eclipse.minify.plugin;
 
 import org.eclipse.core.resources.IResource;
-import org.eclipse.core.resources.IResourceChangeEvent;
-import org.eclipse.core.resources.IResourceChangeListener;
-import org.eclipse.core.resources.IResourceDelta;
-import org.eclipse.core.resources.IWorkspace;
 import org.eclipse.core.resources.ProjectScope;
-import org.eclipse.core.resources.ResourcesPlugin;
-import org.eclipse.core.runtime.IPath;
-import org.eclipse.ui.IStartup;
+import org.eclipse.core.runtime.CoreException;
+import org.eclipse.core.runtime.IStatus;
+import org.eclipse.core.runtime.Status;
 import org.osgi.service.prefs.BackingStoreException;
 import org.osgi.service.prefs.Preferences;
 
@@ -46,7 +42,7 @@ import org.osgi.service.prefs.Preferences;
  * Such a class (started with the workbench) should -- according to the Eclipse
  * documentation -- never be written.
  */
-public class Startup implements IStartup {
+public class PrefsAccess {
 
 	/**
 	 * Returns the plugin's project scoped preferences using the given 
@@ -79,14 +75,19 @@ public class Startup implements IStartup {
 	 * @throws BackingStoreException
 	 */
 	public static void removeResource(Preferences prefs, IResource resource) 
-			throws BackingStoreException {
-		String[] keys = prefs.keys();
-		for (String key: keys) {
-			if (key.endsWith("//" + resource.getProjectRelativePath().toPortableString())) {
-				prefs.remove(key);
+			throws CoreException {
+		try {
+			String[] keys = prefs.keys();
+			for (String key: keys) {
+				if (key.endsWith("//" + resource.getProjectRelativePath().toPortableString())) {
+					prefs.remove(key);
+				}
 			}
+			prefs.flush();
+		} catch (BackingStoreException e) {
+			throw new CoreException(new Status(
+					IStatus.ERROR, MinifyBuilder.BUILDER_ID, e.getMessage(), e));
 		}
-		prefs.flush();
 	}
 
 	/**
@@ -100,54 +101,21 @@ public class Startup implements IStartup {
 	 */
 	public static void moveResource(Preferences fromPrefs, IResource fromResource,
 			Preferences toPrefs, IResource toResource) 
-			throws BackingStoreException {
-		String[] keys = fromPrefs.keys();
-		for (String key: keys) {
-			if (key.endsWith("//" + fromResource.getProjectRelativePath().toPortableString())) {
-				String resourcePreference = key.substring(0, key.indexOf('/'));
-				toPrefs.put(preferenceKey(toResource, resourcePreference), fromPrefs.get(key, ""));
-				fromPrefs.remove(key);
-			}
-		}
-		fromPrefs.flush();
-		toPrefs.flush();
-	}
-
-	@Override
-	public void earlyStartup() {
-		IWorkspace workspace = ResourcesPlugin.getWorkspace();
-		workspace.addResourceChangeListener(new IResourceChangeListener() {
-			
-			@Override
-			public void resourceChanged(IResourceChangeEvent event) {
-				try {
-					handleDelta(event.getDelta());
-				} catch (BackingStoreException e) {
-					e.printStackTrace();
+			throws CoreException {
+		try {
+			String[] keys = fromPrefs.keys();
+			for (String key: keys) {
+				if (key.endsWith("//" + fromResource.getProjectRelativePath().toPortableString())) {
+					String resourcePreference = key.substring(0, key.indexOf('/'));
+					toPrefs.put(preferenceKey(toResource, resourcePreference), fromPrefs.get(key, ""));
+					fromPrefs.remove(key);
 				}
 			}
-		}, IResourceChangeEvent.PRE_BUILD);
-	}
-
-	private void handleDelta(IResourceDelta delta) throws BackingStoreException {
-		if (delta.getAffectedChildren().length == 0) {
-			if ((delta.getKind() & IResourceDelta.REMOVED) != 0) {
-				IResource resource = delta.getResource();
-				Preferences resPrefs = Startup.preferences(resource);
-				if ((delta.getFlags() & IResourceDelta.MOVED_TO) != 0) {
-					IPath toPath = delta.getMovedToPath();
-					IResource toResource = ResourcesPlugin
-							.getWorkspace().getRoot().findMember(toPath);
-					Startup.moveResource(resPrefs, resource, 
-							Startup.preferences(toResource), toResource);
-				}
-				Startup.removeResource(resPrefs, resource);
-			}
-			return;
-		}
-		for (IResourceDelta child : delta.getAffectedChildren(
-				IResourceDelta.CHANGED | IResourceDelta.REMOVED)) {
-			handleDelta(child);
+			fromPrefs.flush();
+			toPrefs.flush();
+		} catch (BackingStoreException e) {
+			throw new CoreException(new Status(
+					IStatus.ERROR, MinifyBuilder.BUILDER_ID, e.getMessage(), e));
 		}
 	}
 

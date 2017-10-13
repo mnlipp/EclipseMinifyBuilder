@@ -38,7 +38,7 @@ public class GccMinifier extends MinifyRunner {
 		this.outCharset = destFile.exists() ? destFile.getCharset() : "ascii";
 		console = builder.minifierConsole();
 
-		String optLevel = prefs.get(Startup.preferenceKey(
+		String optLevel = prefs.get(PrefsAccess.preferenceKey(
 				srcFile, MinifyBuilder.GCC_OPTIMIZATION),
 				MinifyBuilder.GCC_OPT_WHITESPACE_ONLY);
 		switch (optLevel) {

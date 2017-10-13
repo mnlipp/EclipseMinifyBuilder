@@ -25,9 +25,9 @@ public class YuiJsMinifier extends YuiMinifier {
 		throws IOException, CoreException {
 		super (builder);
 		preserveSemicolons = prefs.getBoolean(
-				Startup.preferenceKey(srcFile, MinifyBuilder.YUI_PRESERVE_SEMICOLONS), true);
+				PrefsAccess.preferenceKey(srcFile, MinifyBuilder.YUI_PRESERVE_SEMICOLONS), true);
 		disableOptimizations = prefs.getBoolean(
-				Startup.preferenceKey(srcFile, MinifyBuilder.YUI_DISABLE_OPTIMIZATIONS), true);
+				PrefsAccess.preferenceKey(srcFile, MinifyBuilder.YUI_DISABLE_OPTIMIZATIONS), true);
 		outCharset = destFile.exists() ? destFile.getCharset() : srcFile.getCharset();
 		writer = new OutputStreamWriter(out, outCharset);
 		compressor = new JavaScriptCompressor(new BufferedReader(

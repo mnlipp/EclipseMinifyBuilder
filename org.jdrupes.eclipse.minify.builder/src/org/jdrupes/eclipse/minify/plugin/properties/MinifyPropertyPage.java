@@ -30,7 +30,7 @@ import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Text;
 import org.eclipse.ui.dialogs.PropertyPage;
 import org.jdrupes.eclipse.minify.plugin.MinifyBuilder;
-import org.jdrupes.eclipse.minify.plugin.Startup;
+import org.jdrupes.eclipse.minify.plugin.PrefsAccess;
 import org.osgi.service.prefs.BackingStoreException;
 import org.osgi.service.prefs.Preferences;
 
@@ -44,11 +44,11 @@ public abstract class MinifyPropertyPage extends PropertyPage {
 	protected abstract String[][] options();
 	
 	protected Preferences builderPreferences() {
-		return Startup.preferences((IResource)getElement());
+		return PrefsAccess.preferences((IResource)getElement());
 	}
 
 	protected String preferenceKey(String resourcePreference) {
-		return Startup.preferenceKey((IResource)getElement(), resourcePreference);
+		return PrefsAccess.preferenceKey((IResource)getElement(), resourcePreference);
 	}
 	
 	private void addFirstSection(Composite parent) {
@@ -166,7 +166,7 @@ public abstract class MinifyPropertyPage extends PropertyPage {
 		    if (prefs.get(preferenceKey(
 		    		MinifyBuilder.MINIFIER), MinifyBuilder.DONT_MINIFY)
 		    		.equals(MinifyBuilder.DONT_MINIFY)) {
-		    	Startup.removeResource(prefs, (IResource)getElement());
+		    	PrefsAccess.removeResource(prefs, (IResource)getElement());
 		    }
 			prefs.flush();
 			((IResource)getElement()).touch(null);
