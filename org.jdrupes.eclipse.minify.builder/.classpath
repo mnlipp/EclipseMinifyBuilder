@@ -4,6 +4,6 @@
 	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER/org.eclipse.jdt.internal.debug.ui.launcher.StandardVMType/JavaSE-1.8"/>
 	<classpathentry kind="con" path="org.eclipse.pde.core.requiredPlugins"/>
 	<classpathentry kind="src" path="src"/>
-	<classpathentry kind="lib" path="lib/closure-compiler-v20170910.jar" sourcepath="/home/mnl/tools/closure-compiler-maven-v20170910"/>
+	<classpathentry kind="lib" path="lib/closure-compiler-v20180204.jar" sourcepath="/home/mnl/devel/maven-closure-compiler-v20180204"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>

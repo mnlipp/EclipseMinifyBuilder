@@ -63,6 +63,8 @@ public class MinifyBuilder extends IncrementalProjectBuilder {
 	public static final String GCC_OPT_WHITESPACE_ONLY = "optWhitespaceOnly";
 	public static final String GCC_OPT_SIMPLE = "optSimple";
 	public static final String GCC_OPT_ADVANCED = "optAdvanced";
+	public static final String GCC_CREATE_MAP_FILE = "createMapFile";
+	public static final String GCC_INCLUDE_SOURCE = "includeSource";
 	
 	private static final String MARKER_TYPE = "org.jdrupes.eclipse.minify.plugin.minifyProblem";
 
@@ -217,6 +219,14 @@ public class MinifyBuilder extends IncrementalProjectBuilder {
 				destFile.setCharset(producer.destCharset(), null);
 			}
 			producer.join();
+			for (IFile extraFile: producer.createdExtraFiles()) {
+				if (!extraFile.isSynchronized(IResource.DEPTH_ZERO)) {
+					extraFile.refreshLocal(IResource.DEPTH_ZERO, null);
+				}
+				if (extraFile.exists()) {
+					extraFile.setDerived(true, null);
+				}
+			}
 			processMarkers();
 			producer.checkException();
 		} catch (CoreException e) {
@@ -242,6 +252,7 @@ public class MinifyBuilder extends IncrementalProjectBuilder {
 		
 		private MinifyBuilder builder;
 		private Exception exception = null;
+		private List<IFile> createdExtraFiles = new ArrayList<>();
 
 		protected MinifyRunner(MinifyBuilder builder) {
 			this.builder = builder;
@@ -249,6 +260,14 @@ public class MinifyBuilder extends IncrementalProjectBuilder {
 
 		protected MinifyBuilder builder() {
 			return builder;
+		}
+		
+		public List<IFile> createdExtraFiles() {
+			return createdExtraFiles;
+		}
+
+		protected void addCreatedExtraFile(IFile file) {
+			createdExtraFiles.add(file);
 		}
 		
 		public void checkException() throws Exception {

@@ -2,7 +2,7 @@
 <feature
       id="org.jdrupes.eclipse.minify.feature"
       label="Minify Builder Feature"
-      version="0.9.4.qualifier"
+      version="0.9.5.qualifier"
       plugin="org.jdrupes.eclipse.minify.plugin">
 
    <description url="https://github.com/mnlipp/EclipseMinifyBuilder">

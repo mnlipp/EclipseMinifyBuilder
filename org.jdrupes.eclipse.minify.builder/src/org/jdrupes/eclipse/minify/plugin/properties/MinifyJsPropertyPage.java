@@ -23,6 +23,8 @@ import org.eclipse.swt.SWT;
 import org.eclipse.swt.custom.StackLayout;
 import org.eclipse.swt.events.ModifyEvent;
 import org.eclipse.swt.events.ModifyListener;
+import org.eclipse.swt.events.SelectionAdapter;
+import org.eclipse.swt.events.SelectionEvent;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.Button;
@@ -46,6 +48,8 @@ public class MinifyJsPropertyPage extends MinifyPropertyPage {
 	protected Button disableOptimizations;
 	protected Composite gccOptGroup;
 	protected Combo gccOptimization;
+	protected Button gccCreateMap;
+	protected Button gccIncludeSource;
 	protected String[][] optimizations = new String[][] {
 			{ MinifyBuilder.GCC_OPT_WHITESPACE_ONLY, MinifyBuilder.GCC_OPT_SIMPLE, 
 				MinifyBuilder.GCC_OPT_ADVANCED },
@@ -73,9 +77,9 @@ public class MinifyJsPropertyPage extends MinifyPropertyPage {
 		data.horizontalAlignment = GridData.FILL;
 		yuiOptGroup.setLayoutData(data);
 		
-		preserveSemicolons = createCheckbox("Preserve Semicolons", 
+		preserveSemicolons = createCheckbox(yuiOptGroup, "Preserve Semicolons", 
 				MinifyBuilder.YUI_PRESERVE_SEMICOLONS, true, prefs);
-		disableOptimizations = createCheckbox("Disable Optimizations",
+		disableOptimizations = createCheckbox(yuiOptGroup, "Disable Optimizations",
 				MinifyBuilder.YUI_DISABLE_OPTIMIZATIONS, true, prefs);
 
 		gccOptGroup = new Composite(optionsStack, SWT.NONE);
@@ -108,8 +112,7 @@ public class MinifyJsPropertyPage extends MinifyPropertyPage {
 				gccOptimization.setText(optimizations[1][i]);
 				break;
 			}
-		}
-	    
+		}	    
 		updateOptGroups();
 		selection().addModifyListener(new ModifyListener() {
 			@Override
@@ -117,11 +120,23 @@ public class MinifyJsPropertyPage extends MinifyPropertyPage {
 				updateOptGroups();
 			}
 		});
+		
+		gccCreateMap = createCheckbox(gccOptGroup, "Create map file", 
+				MinifyBuilder.GCC_CREATE_MAP_FILE, false, prefs);
+		gccIncludeSource = createCheckbox(gccOptGroup, "Include source in map file", 
+				MinifyBuilder.GCC_INCLUDE_SOURCE, false, prefs);
+		gccIncludeSource.setEnabled(gccCreateMap.getSelection());
+		gccCreateMap.addSelectionListener(new SelectionAdapter() {
+			@Override
+			public void widgetSelected(SelectionEvent e) {
+				gccIncludeSource.setEnabled(gccCreateMap.getSelection());
+			}
+		});
 	}
 
-	private Button createCheckbox(
+	private Button createCheckbox(Composite parent,
 			String label, String property, boolean defaultValue, Preferences prefs) {
-		Button checkbox = new Button(yuiOptGroup, SWT.CHECK);
+		Button checkbox = new Button(parent, SWT.CHECK);
 		checkbox.setText(label);
 		checkbox.setSelection(prefs.getBoolean(preferenceKey(property), defaultValue));
 		checkbox.requestLayout();
@@ -148,6 +163,8 @@ public class MinifyJsPropertyPage extends MinifyPropertyPage {
 		prefs.remove(preferenceKey(MinifyBuilder.YUI_PRESERVE_SEMICOLONS));
 		prefs.remove(preferenceKey(MinifyBuilder.YUI_DISABLE_OPTIMIZATIONS));
 		prefs.remove(preferenceKey(MinifyBuilder.GCC_OPTIMIZATION));
+		prefs.remove(preferenceKey(MinifyBuilder.GCC_CREATE_MAP_FILE));
+		prefs.remove(preferenceKey(MinifyBuilder.GCC_INCLUDE_SOURCE));
 		if (selection().getText().equals(OPTIONS[1][1])) {
 			prefs.putBoolean(preferenceKey(MinifyBuilder.YUI_PRESERVE_SEMICOLONS),
 					preserveSemicolons.getSelection());
@@ -160,6 +177,10 @@ public class MinifyJsPropertyPage extends MinifyPropertyPage {
 					break;
 				}
 			}
+			prefs.putBoolean(preferenceKey(MinifyBuilder.GCC_CREATE_MAP_FILE), 
+					gccCreateMap.getSelection());
+			prefs.putBoolean(preferenceKey(MinifyBuilder.GCC_INCLUDE_SOURCE), 
+					gccIncludeSource.getSelection());
 		}
 			
 		return true;
