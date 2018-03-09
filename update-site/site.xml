@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <site>
-   <feature url="features/org.jdrupes.eclipse.minify.feature_0.9.4.201710132011.jar" id="org.jdrupes.eclipse.minify.feature" version="0.9.4.201710132011">
+   <feature url="features/org.jdrupes.eclipse.minify.feature_0.9.5.201803091225.jar" id="org.jdrupes.eclipse.minify.feature" version="0.9.5.201803091225">
       <category name="webDevelopment"/>
    </feature>
    <category-def name="webDevelopment" label="Web Development"/>
