@@ -7,7 +7,7 @@ Installation
 -----------
 
 You can install the plugin through its update site
-[https://mnlipp.github.io/EclipseMinifyBuilder/update-site/](https://mnlipp.github.io/EclipseMinifyBuilder/update-site/).
+[https://raw.githubusercontent.com/mnlipp/EclipseMinifyBuilder/gh-pages/update-site/](https://raw.githubusercontent.com/mnlipp/EclipseMinifyBuilder/gh-pages/update-site/).
 
 Usage
 -----
